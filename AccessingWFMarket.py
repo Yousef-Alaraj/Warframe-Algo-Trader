@@ -104,32 +104,34 @@ def login(
         return None, None
     return (response.json()["payload"]["user"]["ingame_name"], response.headers["Authorization"])
 
-def postOrder(item, order_type, platinum, quantity, visible, modRank, itemName):
-    # if order_type == "buy":
-    #     visible = False
+# ADDED: subtype=None as an optional final argument
+def postOrder(item, order_type, platinum, quantity, visible, modRank, itemName, subtype=None):
+    # Base dictionary without the subtype key
     json_data = {
         "itemId": str(item),
         "type": str(order_type),
         "platinum": int(platinum),
         "quantity": int(quantity),
-        "visible": bool(visible),
-        "subtype": "regular"
+        "visible": bool(visible)
     }
+    
     if modRank:
         json_data["rank"] = int(modRank)
 
-    if subtype and str(subtype).lower() != "nan":
+    # NEW: Safe Payload Injection. 
+    # Only inject the subtype key if it actually contains a real value.
+    if subtype and str(subtype).lower() not in ["nan", "none"]:
         json_data["subtype"] = str(subtype)
     
-    # print(json_data.keys())
     print(f"RAW JSON PAYLOAD: {json.dumps(json_data)}")
     
     response = warframeApi.post(f'{WFM_API}/order', json=json_data)
     print(response.text)
 
+    # Update logging to include the subtype we used
     customLogger.writeTo(
         "wfmAPICalls.log",
-        f"POST:{WFM_API}/order\tResponse:{response.status_code}\tItem:{itemName}\tOrder Type:{order_type}\tPlatinum:{platinum}\tQuantity:{quantity}\tVisible:{visible}\tRank:{modRank}"
+        f"POST:{WFM_API}/order\tResponse:{response.status_code}\tItem:{itemName}\tOrder Type:{order_type}\tPlatinum:{platinum}\tQuantity:{quantity}\tVisible:{visible}\tRank:{modRank}\tSubtype:{subtype}"
     )
 
     if response.status_code == 200:

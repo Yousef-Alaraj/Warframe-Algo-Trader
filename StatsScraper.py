@@ -29,6 +29,7 @@ for v2_item in v2_response:
     translated_item = {
         "id": v2_item["id"],
         "url_name": v2_item["slug"],
+        "subtype": v2_item.get("subtypes", None),
         "item_name": v2_item["i18n"]["en"]["name"]
     }
 
@@ -70,6 +71,18 @@ def getDayStr(daysBack):
 
 def fast_flatten(input_list):
     return list(chain.from_iterable(input_list))
+
+def get_subtype_string(url_name):
+    match = itemListDF[itemListDF["url_name"] == url_name]
+    if match.empty:
+        return None
+    
+    subtype_data = match.iloc[0]["subtype"]
+    
+    # If it's a list/array, join it into a string
+    if isinstance(subtype_data, list):
+        return ",".join(subtype_data)
+    return subtype_data
 
 
 lastManyDays = [getDayStr(x) for x in range(1, 15)]
@@ -130,6 +143,7 @@ itemListDF = pd.DataFrame.from_dict(itemList)
 #itemListDF
 #df = df.drop("Unnamed: 0", axis=1)
 df["item_id"] = df.apply(lambda row : itemListDF[itemListDF["url_name"] == row["name"]].reset_index().loc[0, "id"], axis=1)
+df["subtype"] = df.apply(lambda row: get_subtype_string(row["name"]), axis=1)
 df["url_name"] = df["name"].str.replace("_", "-")
 df["order_type"] = df.get("order_type").str.lower()
 df.to_csv("allItemData.csv", index=False)

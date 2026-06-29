@@ -306,7 +306,7 @@ def get_new_buy_data(myBuyOrdersDF, response, itemStats):
 
 
 
-def compareLiveOrdersWhenBuying(item, liveOrderDF, itemStats, currentOrders, myBuyOrdersDF, itemID, modRank, settings):
+def compareLiveOrdersWhenBuying(item, liveOrderDF, itemStats, currentOrders, myBuyOrdersDF, itemID, modRank, settings, itemSubtype):
     con = sqlite3.connect('inventory.db')
 
     inventory = pd.read_sql_query("SELECT * FROM inventory", con)
@@ -337,7 +337,7 @@ def compareLiveOrdersWhenBuying(item, liveOrderDF, itemStats, currentOrders, myB
             updateListing(myOrderID, postPrice, 1, str(visibility), item, "buy")
             return
         else:
-            postOrder(itemID, orderType, postPrice, 1, True, modRank, item)
+            postOrder(itemID, orderType, postPrice, 1, True, modRank, item, itemSubtype)
             logging.debug(f"AUTOMATICALLY POSTED VISIBLE {orderType.upper()} ORDER FOR {postPrice}")
             return
     elif numBuyers == 0:
@@ -393,7 +393,7 @@ def compareLiveOrdersWhenBuying(item, liveOrderDF, itemStats, currentOrders, myB
                         deleteOrder(unselectedItem[3])
                         logging.debug(f"DELETED BUY order for {unselectedItem[2]} since it is not as optimal")
 
-                response = postOrder(itemID, orderType, str(postPrice), str(1), True, modRank, item)
+                response = postOrder(itemID, orderType, str(postPrice), str(1), True, modRank, item, itemSubtype)
                 if response.status_code != 200:
                     return
                 response = response.json()["data"]
@@ -410,7 +410,7 @@ def compareLiveOrdersWhenBuying(item, liveOrderDF, itemStats, currentOrders, myB
         return
 
 
-def compareLiveOrdersWhenSelling(item, liveOrderDF, itemStats, currentOrders, itemID, modRank, settings):
+def compareLiveOrdersWhenSelling(item, liveOrderDF, itemStats, currentOrders, itemID, modRank, settings, itemSubtype):
     con = sqlite3.connect('inventory.db')
 
     inventory = pd.read_sql_query("SELECT * FROM inventory", con)
@@ -441,7 +441,7 @@ def compareLiveOrdersWhenSelling(item, liveOrderDF, itemStats, currentOrders, it
             updateListing(myOrderID, postPrice, myQuantity, str(visibility), item, "sell")
             return
         else:
-            postOrder(itemID, orderType, postPrice, str(myQuantity), str(True), modRank, item)
+            postOrder(itemID, orderType, postPrice, str(myQuantity), str(True), modRank, item, itemSubtype)
             updateDBPrice(item, postPrice)
             return
     bestSeller = liveSellerDF.iloc[0]
@@ -470,7 +470,7 @@ def compareLiveOrdersWhenSelling(item, liveOrderDF, itemStats, currentOrders, it
             logging.debug(f"Your current (possibly hidden) posting on this item for {myPlatPrice} plat is a good one. Recommend to make visible.")
             return
     else:
-        response = postOrder(itemID, orderType, int(postPrice), str(myQuantity), str(True), modRank, item)
+        response = postOrder(itemID, orderType, int(postPrice), str(myQuantity), str(True), modRank, item, itemSubtype)
         updateDBPrice(item, int(postPrice))
         logging.debug(f"AUTOMATICALLY POSTED VISIBLE {orderType.upper()} ORDER FOR {postPrice}")
         return
@@ -481,7 +481,7 @@ def compareLiveOrdersWhenSelling(item, liveOrderDF, itemStats, currentOrders, it
 #     return row["platinum"] - overlap_platinum
 
 
-r = postOrder("56783f24cbfa8f0432dd89a2", "buy", 1, 1, False, None, "lex_prime_set")
+r = postOrder("56783f24cbfa8f0432dd89a2", "buy", 1, 1, False, None, "lex_prime_set", None)
 if r.status_code == 401:
     config.setConfigStatus("runningLiveScraper", False)
     raise Exception(f"Invalid JWT Token")
@@ -568,7 +568,7 @@ try:
                     modRank = v2_response["maxRank"]
                 except KeyError:
                     modRank = None
-                compareLiveOrdersWhenSelling(item, liveOrderDF, None, currentOrders, itemID, modRank, settings)
+                compareLiveOrdersWhenSelling(item, liveOrderDF, None, currentOrders, itemID, modRank, settings, None)
 
                 continue
 
@@ -577,12 +577,19 @@ try:
             
             itemID = getItemId(item)
             modRank = getItemRank(buySellOverlap, item)
-            itemSubtype = buySellOverlap.loc[item, "subtype"]
+            # NEW: Live Market First, CSV Fallback logic
+            if not liveOrderDF.empty and liveOrderDF.iloc[0].get("subtype") is not None:
+                itemSubtype = liveOrderDF.iloc[0]["subtype"]
+            else:
+                # Ghost Town Fallback: grab from CSV. If Pandas makes it NaN, set to None.
+                itemSubtype = buySellOverlap.loc[item, "subtype"]
+                if str(itemSubtype).lower() == "nan":
+                    itemSubtype = None
 
-            newBuyOrderDf = compareLiveOrdersWhenBuying(item, liveOrderDF, itemStats, currentOrders, myBuyOrdersDF, itemID, modRank, settings)
+            newBuyOrderDf = compareLiveOrdersWhenBuying(item, liveOrderDF, itemStats, currentOrders, myBuyOrdersDF, itemID, modRank, settings, itemSubtype)
             if isinstance(newBuyOrderDf, pd.DataFrame):
                 myBuyOrdersDF = newBuyOrderDf
-            compareLiveOrdersWhenSelling(item, liveOrderDF, itemStats, currentOrders, itemID, modRank, settings)
+            compareLiveOrdersWhenSelling(item, liveOrderDF, itemStats, currentOrders, itemID, modRank, settings, itemSubtype)
             
             #compareLiveOrdersToData(item, liveOrderDF, "buy", itemStats, currentOrders, itemID, modRank, inventory)
             #compareLiveOrdersToData(item, liveOrderDF, "sell", itemStats, currentOrders, itemID, modRank, inventory)
