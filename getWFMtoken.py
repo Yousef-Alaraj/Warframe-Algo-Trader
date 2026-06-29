@@ -12,6 +12,7 @@ def login(
     Returns (User_Name, JWT_Token) on success,
     or returns (None, None) if unsuccessful.
     """
+    raise NotImplementedError("This login endpoint is deprecated and disallowed by v2 API.")
     headers = {
         "Content-Type": "application/json; utf-8",
         "Accept": "application/json",

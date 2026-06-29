@@ -22,7 +22,7 @@ def setConfigStatus(key, value):
 pb_token = configData["pushbutton_token"]
 pushbutton_device_iden = configData["pushbutton_device_iden"]
 jwt_token = configData["wfm_jwt_token"]
-jwt_token = "JWT " + jwt_token.split(" ")[-1]
+jwt_token = "Bearer " + jwt_token.split(" ")[-1]
 inGameName = configData['inGameName']
 platform = configData['platform'].lower()
 webhookLink = configData["webhookLink"]

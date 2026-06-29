@@ -1,5 +1,5 @@
 import json, requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from tqdm import tqdm
 import pandas as pd
 import os
@@ -16,10 +16,24 @@ customLogger.clearFile("relicsAPICalls.log")
 customLogger.writeTo("relicsApiCalls.log", "Started Stats Scraper")
 
 
-allItemsLink = "https://api.warframe.market/v1/items"
+# oldAllItemsLink = "https://api.warframe.market/v1/items"
+allItemsLink = "https://api.warframe.market/v2/items"
 r = requests.get(allItemsLink)
 customLogger.writeTo("wfmAPICalls.log", f"GET:{allItemsLink}\tResponse:{r.status_code}")
-itemList = r.json()["payload"]["items"]
+
+v2_response = r.json()["data"]
+
+itemList = []
+    
+for v2_item in v2_response:
+    translated_item = {
+        "id": v2_item["id"],
+        "url_name": v2_item["slug"],
+        "item_name": v2_item["i18n"]["en"]["name"]
+    }
+
+    itemList.append(translated_item)
+
 itemNameList = [x["url_name"] for x in itemList if "relic" not in x["url_name"]]
 urlLookup = {x["item_name"] : x["url_name"] for x in itemList}
 
@@ -50,8 +64,8 @@ def getDataLink(dayStr):
         return f"https://relics.run/history/price_history_{dayStr}.json"
 
 def getDayStr(daysBack):
-    day = datetime.utcnow() - timedelta(daysBack)
-    dayStr = datetime.strftime(day, '%Y-%m-%d')
+    day = datetime.now(UTC) - timedelta(days=daysBack)
+    dayStr = day.strftime('%Y-%m-%d')
     return dayStr
 
 def fast_flatten(input_list):
@@ -116,6 +130,7 @@ itemListDF = pd.DataFrame.from_dict(itemList)
 #itemListDF
 #df = df.drop("Unnamed: 0", axis=1)
 df["item_id"] = df.apply(lambda row : itemListDF[itemListDF["url_name"] == row["name"]].reset_index().loc[0, "id"], axis=1)
+df["url_name"] = df["name"].str.replace("_", "-")
 df["order_type"] = df.get("order_type").str.lower()
 df.to_csv("allItemData.csv", index=False)
 

@@ -120,9 +120,23 @@ async def root():
 async def get_a_list_of_names_of_all_tradable_items():
     global itemNameList
     if len(itemNameList) == 0:
-        allItemsLink = "https://api.warframe.market/v1/items"
+        # allItemsLink = "https://api.warframe.market/v1/items"
+        allItemsLink = "https://api.warframe.market/v2/items"
         r = requests.get(allItemsLink)
-        itemList = r.json()["payload"]["items"]
+        customLogger.writeTo("wfmAPICalls.log", f"GET:{allItemsLink}\tResponse:{r.status_code}")
+
+        v2_response = r.json()["data"]
+
+        itemList = []
+            
+        for v2_item in v2_response:
+            translated_item = {
+                "id": v2_item["id"],
+                "url_name": v2_item["slug"],
+                "item_name": v2_item["i18n"]["en"]["name"]
+            }
+
+            itemList.append(translated_item)
         itemNameList = sorted([x["url_name"] for x in itemList])
     return {"item_names" : itemNameList}
 
@@ -222,29 +236,30 @@ async def sellItem(item : Item):
         return {"Executed" : False, "Reason": "Item not in database."}
 
 def get_order_data(t : Transact):
-    url = f"https://api.warframe.market/v1/profile/{config.inGameName}/orders"
+    # url = f"https://api.warframe.market/v1/profile/{config.inGameName}/orders"
+    #
+    # headers = {
+    #     "Content-Type": "application/json; utf-8",
+    #     "Accept": "application/json",
+    #     "auth_type": "header",
+    #     "platform": config.platform,
+    #     "language": "en",
+    #     "Authorization" : jwt_token
+    # }
+    #
+    # response = requests.get(url, headers=headers)
+    # if response.status_code == 200:
+    #     data = response.json()
 
-    headers = {
-        "Content-Type": "application/json; utf-8",
-        "Accept": "application/json",
-        "auth_type": "header",
-        "platform": config.platform,
-        "language": "en",
-        "Authorization" : jwt_token
-    }
+    orders = getOrders()
+    orders = orders[f"{t.transaction_type}_orders"]
 
-    response = requests.get(url, headers=headers)
+    for order in orders:
+        if order["item"]["url_name"] == t.name:
+            return order["id"], order['platinum'], order["quantity"]
 
-    if response.status_code == 200:
-        data = response.json()
-        orders = data["payload"][f"{t.transaction_type}_orders"]
-
-        for order in orders:
-            if order["item"]["url_name"] == t.name:
-                return order["id"], order['platinum'], order["quantity"]
-
-        # If no matching order found
-        return None, None, None
+    # If no matching order found
+    return None, None, None
 
     # If API call failed
     return None, None, None
@@ -270,10 +285,10 @@ def delete_order(t : Transact):
         )
 
     
-    delete_url = f"https://api.warframe.market/v1/profile/orders/{order_id}"
+    delete_url = f"https://api.warframe.market/v2/order/{order_id}"
     
     headers = {
-        "Content-Type": "application/json; utf-8",
+        "Content-Type": "application/json",
         "Accept": "application/json",
         "auth_type": "header",
         "platform": config.platform,
@@ -293,7 +308,6 @@ def delete_order(t : Transact):
 
 @app.put("/market/close")
 def close_order(t : Transact):
-    logging.error(t.name)
     # Make the DELETE API call
     order_id, order_plat, order_quant = get_order_data(t)
 
@@ -308,10 +322,10 @@ def close_order(t : Transact):
         time.sleep(0.33)
 
 
-    close_url = f"https://api.warframe.market/v1/profile/orders/close/{order_id}"
+    close_url = f"https://api.warframe.market/v2/order/{order_id}/close"
     
     headers = {
-            "Content-Type": "application/json; utf-8",
+            "Content-Type": "application/json",
             "Accept": "application/json",
             "auth_type": "header",
             "platform": config.platform,
@@ -320,7 +334,9 @@ def close_order(t : Transact):
             'User-Agent': 'Warframe Algo Trader/1.2.8',
         }
     
-    response = requests.put(close_url, headers=headers, json={})
+    response = requests.post(close_url, headers=headers, json={
+        "quantity": int(t.number)
+    })
     
     if response.status_code == 200:
         return {"message": "Order closed successfully"}

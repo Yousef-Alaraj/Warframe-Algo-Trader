@@ -43,3 +43,19 @@ next-env.d.ts
 
 tradeLog.txt
 allItemData.csv
+
+# Python Virtual Environments
+venv/
+env/
+.venv/
+
+# Logs
+*.log
+tradeLog.txt
+*.db
+
+# Python byte-code
+__pycache__/
+*.py[cod]
+
+

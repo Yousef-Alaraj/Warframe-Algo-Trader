@@ -18,6 +18,18 @@ customLogger.clearFile("orderTracker.log")
 customLogger.writeTo("orderTracker.log", "Started Live Scraper")
 
 
+def get_id_to_url_map():
+    # 1. Load the CSV
+    df = pd.read_csv("allItemData.csv")
+    
+    # 2. Drop rows where item_id or url_name might be missing (safety check)
+    df = df.dropna(subset=['item_id', 'url_name'])
+    
+    # 3. Create the dictionary: { "item_id": "url_name" }
+    # We cast to string to ensure the ID matches the format you get from the API
+    id_map = dict(zip(df["item_id"].astype(str), df["url_name"]))
+    
+    return id_map
 
 def readSettings():
     with open('settings.json') as settingsFile:
@@ -51,7 +63,7 @@ def getBuySellOverlap(settings):
     #rangeFilter = 10
 
     averaged_df = df.drop(["datetime", "item_id"], axis=1)
-    averaged_df = averaged_df.groupby(['name', 'order_type']).mean().reset_index()
+    averaged_df = averaged_df.groupby(['name', 'order_type']).mean(numeric_only=True).reset_index()
 
     # Create your connection.
     con = sqlite3.connect('inventory.db')
@@ -123,6 +135,7 @@ def getBuySellOverlap(settings):
     buySellOverlap["priceShift"] = buySellOverlap.apply(lambda row : dfFilter.loc[row["name"], "weekPriceShift"], axis=1)
     buySellOverlap["mod_rank"] = buySellOverlap.apply(lambda row : dfFilter.loc[row["name"], "mod_rank"], axis=1)
     buySellOverlap["item_id"] = buySellOverlap.apply(lambda row : df[df["name"] == row["name"]].reset_index().loc[0, "item_id"], axis=1)
+    buySellOverlap["subtype"] = buySellOverlap.apply(lambda row : df[df["name"] == row["name"]].reset_index().loc[0, "subtype"], axis=1)
 
 
     buySellOverlap = buySellOverlap.set_index("name")
@@ -168,17 +181,37 @@ def deleteAllOrders(settings):
             deleteOrder(order["id"])
 
 def getFilteredDF(item):
-    r = warframeApi.get(f"https://api.warframe.market/v1/items/{item}/orders")
+    r = warframeApi.get(f"https://api.warframe.market/v2/orders/item/{item}")
     customLogger.writeTo(
         "wfmAPICalls.log",
-        f"GET:https://api.warframe.market/v1/items/{item}/orders\tResponse:{r.status_code}"
+        f"GET:https://api.warframe.market/v2/orders/item/{item}\tResponse:{r.status_code}"
     )
     logging.debug(r)
     try:
-        data = r.json()
+        v2_response = r.json()["data"]
     except:
         return pd.DataFrame()
-    data = data["payload"]["orders"]
+
+    # print(v2_response[0])
+    data = []
+    for v2_item in v2_response:
+        translated_item = {
+            "id": v2_item["id"],
+            "order_type": v2_item["type"],
+            "platinum": v2_item["platinum"],
+            "quantity": v2_item["quantity"],
+            "visible": v2_item["visible"],
+            "creation_date": v2_item["createdAt"],
+            "user": {
+                "id": v2_item["user"]["id"],
+                "ingame_name": v2_item["user"]["ingameName"],
+                "status": v2_item["user"]["status"]
+            }
+        }
+        if "rank" in v2_item:
+            translated_item["mod_rank"] = v2_item["rank"]
+        data.append(translated_item)
+
     df = pd.DataFrame.from_dict(data)
     df["status"] = df.apply(lambda row : row["user"]["status"], axis=1)
     df["username"] = df.apply(lambda row : row["user"]["ingame_name"], axis=1)
@@ -260,9 +293,10 @@ def knapsack(items, max_weight):
     return dp[n][max_weight], selected_items, unselected_items
 
 def get_new_buy_data(myBuyOrdersDF, response, itemStats):
-    newBuyOrderDF = pd.DataFrame.from_dict(response["order"])
+    print(response)
+    newBuyOrderDF = pd.DataFrame([response])
     if newBuyOrderDF.shape[0] != 0:
-        newBuyOrderDF["url_name"] = newBuyOrderDF["item"]["url_name"]
+        newBuyOrderDF["url_name"] = url_name_lookup.get(str(response["itemId"])) 
         newBuyOrderDF = newBuyOrderDF.iloc[0].to_frame().T
         newBuyOrderDF["potential_profit"] = itemStats['closedAvg'] - newBuyOrderDF["platinum"]
             
@@ -361,7 +395,7 @@ def compareLiveOrdersWhenBuying(item, liveOrderDF, itemStats, currentOrders, myB
                 response = postOrder(itemID, orderType, str(postPrice), str(1), True, modRank, item)
                 if response.status_code != 200:
                     return
-                response = response.json()["payload"]
+                response = response.json()["data"]
                 myBuyOrdersDF = get_new_buy_data(myBuyOrdersDF, response, itemStats)
                 logging.debug(f"AUTOMATICALLY POSTED VISIBLE {orderType.upper()} ORDER FOR {postPrice}")
                 return myBuyOrdersDF
@@ -390,6 +424,7 @@ def compareLiveOrdersWhenSelling(item, liveOrderDF, itemStats, currentOrders, it
         updateDBPrice(myOrderID, None)
         deleteOrder(myOrderID)
         logging.debug(f"Deleted sell order for {item} since this is not in your inventory.")
+        # logging.debug(f"Entering sell logic for {item}")
         return
     
     inventory = inventory[inventory["name"] == item]
@@ -445,7 +480,7 @@ def compareLiveOrdersWhenSelling(item, liveOrderDF, itemStats, currentOrders, it
 #     return row["platinum"] - overlap_platinum
 
 
-r = postOrder("56783f24cbfa8f0432dd89a2", "buy", 1, 1, str(False), None, "lex_prime_set")
+r = postOrder("56783f24cbfa8f0432dd89a2", "buy", 1, 1, False, None, "lex_prime_set")
 if r.status_code == 401:
     config.setConfigStatus("runningLiveScraper", False)
     raise Exception(f"Invalid JWT Token")
@@ -453,6 +488,8 @@ if r.status_code == 401:
 settings = readSettings()
 deleteAllOrders(settings)
 interestingItems = list(buySellOverlap.index)
+
+url_name_lookup = get_id_to_url_map()
 
 try:
     while config.getConfigStatus("runningLiveScraper"):
@@ -518,14 +555,16 @@ try:
                 continue
 
             if item not in list(buySellOverlap.index):
-                r = warframeApi.get(f"https://api.warframe.market/v1/items/{item}")
-                customLogger.writeTo("wfmAPICalls.log", f"GET:https://api.warframe.market/v1/items/{item}\tResponse:{r.status_code}")
+                r = warframeApi.get(f"https://api.warframe.market/v2/item/{item}")
+                customLogger.writeTo("wfmAPICalls.log", f"GET:https://api.warframe.market/v2/item/{item}\tResponse:{r.status_code}")
                 if r.status_code != 200:
                     continue
+                v2_response = r.json()["data"]
 
-                itemID = r.json()["payload"]["item"]['id']
+
+                itemID = v2_response["id"]
                 try:
-                    modRank = r.json()["payload"]["item"]["items_in_set"][0]['mod_max_rank']
+                    modRank = v2_response["maxRank"]
                 except KeyError:
                     modRank = None
                 compareLiveOrdersWhenSelling(item, liveOrderDF, None, currentOrders, itemID, modRank, settings)
@@ -537,6 +576,7 @@ try:
             
             itemID = getItemId(item)
             modRank = getItemRank(buySellOverlap, item)
+            itemSubtype = buySellOverlap.loc[item, "subtype"]
 
             newBuyOrderDf = compareLiveOrdersWhenBuying(item, liveOrderDF, itemStats, currentOrders, myBuyOrdersDF, itemID, modRank, settings)
             if isinstance(newBuyOrderDf, pd.DataFrame):
