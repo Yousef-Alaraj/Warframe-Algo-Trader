@@ -104,7 +104,7 @@ def login(
     return (response.json()["payload"]["user"]["ingame_name"], response.headers["Authorization"])
 
 # ADDED: subtype=None as an optional final argument
-def postOrder(item, order_type, platinum, quantity, visible, modRank, itemName, subtype=None):
+def postOrder(item, order_type, platinum, quantity, visible, modRank, itemName, subtype=None, perTrade=None):
     # Base dictionary without the subtype key
     json_data = {
         "itemId": str(item),
@@ -121,6 +121,9 @@ def postOrder(item, order_type, platinum, quantity, visible, modRank, itemName, 
     # Only inject the subtype key if it actually contains a real value.
     if subtype and str(subtype).lower() not in ["nan", "none"]:
         json_data["subtype"] = str(subtype)
+
+    if perTrade is not None and str(perTrade).lower() not in ["nan", "none"]:
+        json_data["perTrade"] = int(perTrade)
     
     print(f"RAW JSON PAYLOAD: {json.dumps(json_data)}")
     
