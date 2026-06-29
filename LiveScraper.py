@@ -202,6 +202,7 @@ def getFilteredDF(item):
             "quantity": v2_item["quantity"],
             "visible": v2_item["visible"],
             "creation_date": v2_item["createdAt"],
+            "subtype": v2_item.get("subtype", None),
             "user": {
                 "id": v2_item["user"]["id"],
                 "ingame_name": v2_item["user"]["ingameName"],
