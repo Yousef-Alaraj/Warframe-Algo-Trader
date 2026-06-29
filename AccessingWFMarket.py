@@ -10,12 +10,11 @@ def get_id_to_url_map():
     # 1. Load the CSV
     df = pd.read_csv("allItemData.csv")
     
-    # 2. Drop rows where item_id or url_name might be missing (safety check)
-    df = df.dropna(subset=['item_id', 'url_name'])
+    # 2. Drop rows where item_id or name might be missing (safety check)
+    df = df.dropna(subset=['item_id', 'name']) # <--- Changed url_name to name
     
-    # 3. Create the dictionary: { "item_id": "url_name" }
-    # We cast to string to ensure the ID matches the format you get from the API
-    id_map = dict(zip(df["item_id"].astype(str), df["url_name"]))
+    # 3. Create the dictionary: { "item_id": "name" }
+    id_map = dict(zip(df["item_id"].astype(str), df["name"])) # <--- Changed url_name to name
     
     return id_map
 
