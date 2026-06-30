@@ -121,11 +121,7 @@ def postOrder(item, order_type, platinum, quantity, visible, modRank, itemName, 
     # Only inject the subtype key if it actually contains a real value.
     if subtype and str(subtype).lower() not in ["nan", "none"]:
         json_data["subtype"] = str(subtype)
-<<<<<<< HEAD
-
-=======
     
->>>>>>> parent of 3bde071 (fixed the perTrade for arcane having to rely on a response 4xx to actually add the perTrade)
     print(f"RAW JSON PAYLOAD: {json.dumps(json_data)}")
     
     response = warframeApi.post(f'{WFM_API}/order', json=json_data)
