@@ -202,7 +202,6 @@ def getFilteredDF(item):
             "visible": v2_item["visible"],
             "creation_date": v2_item["createdAt"],
             "subtype": v2_item.get("subtype", None),
-            "perTrade": v2_item.get("perTrade", None),
             "user": {
                 "id": v2_item["user"]["id"],
                 "ingame_name": v2_item["user"]["ingameName"],
@@ -344,7 +343,6 @@ def compareLiveOrdersWhenBuying(item, liveOrderDF, itemStats, currentOrders, myB
         return
 
     bestBuyer = liveBuyerDF.iloc[0]
-    competitorPerTrade = bestBuyer.get("perTrade", None)
     closedAvgMetric = itemStats["closedAvg"] - bestBuyer["platinum"]
     postPrice = bestBuyer["platinum"]
     potentialProfit = closedAvgMetric - 1
@@ -394,7 +392,7 @@ def compareLiveOrdersWhenBuying(item, liveOrderDF, itemStats, currentOrders, myB
                         deleteOrder(unselectedItem[3])
                         logging.debug(f"DELETED BUY order for {unselectedItem[2]} since it is not as optimal")
 
-                response = postOrder(itemID, orderType, str(postPrice), str(1), True, modRank, item, itemSubtype, competitorPerTrade)
+                response = postOrder(itemID, orderType, str(postPrice), str(1), True, modRank, item, itemSubtype)
                 if response.status_code != 200:
                     return
                 response = response.json()["data"]
@@ -446,7 +444,6 @@ def compareLiveOrdersWhenSelling(item, liveOrderDF, itemStats, currentOrders, it
             updateDBPrice(item, postPrice)
             return
     bestSeller = liveSellerDF.iloc[0]
-    competitorPerTrade = bestSeller.get("perTrade", None)
     postPrice = bestSeller['platinum']
     inventory = inventory[inventory.get("name") == item].reset_index()
     
@@ -472,7 +469,7 @@ def compareLiveOrdersWhenSelling(item, liveOrderDF, itemStats, currentOrders, it
             logging.debug(f"Your current (possibly hidden) posting on this item for {myPlatPrice} plat is a good one. Recommend to make visible.")
             return
     else:
-        response = postOrder(itemID, orderType, int(postPrice), str(myQuantity), str(True), modRank, item, itemSubtype, competitorPerTrade)
+        response = postOrder(itemID, orderType, int(postPrice), str(myQuantity), str(True), modRank, item, itemSubtype)
         updateDBPrice(item, int(postPrice))
         logging.debug(f"AUTOMATICALLY POSTED VISIBLE {orderType.upper()} ORDER FOR {postPrice}")
         return
